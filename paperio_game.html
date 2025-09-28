@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<title>Paper.io – prototyp</title>
+<style>
+  body { margin:0; background:#111; display:flex; justify-content:center; align-items:center; height:100vh; }
+  canvas { background:#1a1a2e; display:block; image-rendering:pixelated; }
+</style>
+</head>
+<body>
+<canvas id="game" width="800" height="600"></canvas>
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+const cellSize = 10;
+const cols = canvas.width / cellSize;
+const rows = canvas.height / cellSize;
+
+let grid = []; // 0=tom, 1=territorium, 2=spår
+function resetGrid() {
+  grid = new Array(cols * rows).fill(0);
+}
+function index(x,y){ return x + y*cols; }
+
+let player = {x:10, y:10, dir:{x:1,y:0}, alive:true};
+let trail = [];
+
+function init() {
+  resetGrid();
+  // Startterritorium
+  for (let y=8;y<13;y++){
+    for (let x=8;x<13;x++){
+      grid[index(x,y)] = 1;
+    }
+  }
+  player = {x:10, y:10, dir:{x:1,y:0}, alive:true};
+  trail = [];
+}
+init();
+
+document.addEventListener("keydown", e=>{
+  if(!player.alive) return;
+  if(e.key==="ArrowUp"||e.key==="w") if(player.dir.y===0) player.dir={x:0,y:-1};
+  if(e.key==="ArrowDown"||e.key==="s") if(player.dir.y===0) player.dir={x:0,y:1};
+  if(e.key==="ArrowLeft"||e.key==="a") if(player.dir.x===0) player.dir={x:-1,y:0};
+  if(e.key==="ArrowRight"||e.key==="d") if(player.dir.x===0) player.dir={x:1,y:0};
+});
+
+function step(){
+  if(!player.alive) return;
+
+  player.x += player.dir.x;
+  player.y += player.dir.y;
+  if(player.x<0) player.x=cols-1;
+  if(player.x>=cols) player.x=0;
+  if(player.y<0) player.y=rows-1;
+  if(player.y>=rows) player.y=0;
+
+  const i = index(player.x,player.y);
+  if(grid[i]===1){
+    if(trail.length>0){
+      claim();
+      trail=[];
+    }
+  } else if(grid[i]===0){
+    grid[i]=2;
+    trail.push(i);
+  } else if(grid[i]===2){
+    player.alive=false;
+  }
+}
+
+function claim(){
+  // Flood-fill från kanterna för att hitta "outside"
+  let outside = new Uint8Array(cols*rows);
+  let q=[];
+  for(let x=0;x<cols;x++){
+    [0,rows-1].forEach(y=>{
+      let i=index(x,y);
+      if(grid[i]!==1&&grid[i]!==2&&!outside[i]){
+        outside[i]=1;q.push(i);
+      }
+    });
+  }
+  for(let y=0;y<rows;y++){
+    [0,cols-1].forEach(x=>{
+      let i=index(x,y);
+      if(grid[i]!==1&&grid[i]!==2&&!outside[i]){
+        outside[i]=1;q.push(i);
+      }
+    });
+  }
+  while(q.length){
+    let i=q.pop();
+    let x=i%cols,y=Math.floor(i/cols);
+    [[1,0],[-1,0],[0,1],[0,-1]].forEach(d=>{
+      let nx=x+d[0],ny=y+d[1];
+      if(nx>=0&&nx<cols&&ny>=0&&ny<rows){
+        let ni=index(nx,ny);
+        if(!outside[ni]&&grid[ni]!==1&&grid[ni]!==2){
+          outside[ni]=1;q.push(ni);
+        }
+      }
+    });
+  }
+  // Gör inneslutna celler till territorium
+  for(let i=0;i<grid.length;i++){
+    if(grid[i]!==1 && outside[i]===0) grid[i]=1;
+  }
+  for(const t of trail) grid[t]=1;
+}
+
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  for(let y=0;y<rows;y++){
+    for(let x=0;x<cols;x++){
+      let v=grid[index(x,y)];
+      if(v===1){ ctx.fillStyle="#0ff"; }
+      else if(v===2){ ctx.fillStyle="#f80"; }
+      else continue;
+      ctx.fillRect(x*cellSize,y*cellSize,cellSize,cellSize);
+    }
+  }
+  // Spelare
+  ctx.fillStyle = player.alive ? "#fff" : "#f00";
+  ctx.fillRect(player.x*cellSize,player.y*cellSize,cellSize,cellSize);
+}
+
+function loop(){
+  step();
+  draw();
+}
+setInterval(loop,100);
+</script>
+</body>
+</html>
